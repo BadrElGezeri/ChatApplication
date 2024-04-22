@@ -253,7 +253,7 @@ void userLogin(int &clientSocket){
             // Compare username and hashed password
             if (usernameFromFile == usernameLogin) {
                 if (hashedPassword == computeHash(passwordLogin)){
-                loginSuccess = "True";
+                loginSuccess = "Login Successful!";
                 cout << "Login Successful" << endl;
                 cout.flush();
                 send(clientSocket, loginSuccess.c_str(), loginSuccess.size(), 0);
