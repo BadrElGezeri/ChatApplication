@@ -4,11 +4,34 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <thread>
+#include <regex>
 
 using namespace std;
 
 string username;
+int clientSocket;
 char userChoice;
+
+void moveCursorUp() {
+    cout << "\033[F"; // Move cursor up one line
+}
+
+void moveCursorDown() {
+    cout << "\033[E"; // Move cursor down one line
+}
+
+void clearCurrentLine() {
+    cout << "\033[K"; // Clear from cursor position to the end of the line
+}
+void displayOutput(const string& output) {
+    moveCursorUp();     // Move cursor up one line
+    clearCurrentLine(); // Clear current line
+    cout << output << endl; // Display the output
+}
+
+
+
+
 
 string encrypt(string text)
 {
@@ -67,7 +90,8 @@ void receiveMessages(int socket) {
     while ((bytesReceived = recv(socket, message, sizeof(message), 0)) > 0) {
         //cout << "Encrypted Message: " << message << endl;
         // cout << "Decrypted Message: " << decrypt(message) << endl;
-        cout << decrypt(message) << endl;
+        cout << "\r\033[36m"<< decrypt(message) << "\n\033[36m";
+        displayOutput(decrypt(message));
         memset(message, 0, sizeof(message)); // Clear buffer for the next receive
     }
     if (bytesReceived == -1) {
@@ -78,8 +102,9 @@ void receiveMessages(int socket) {
 void sendMessages(int socket) {
     string message;
     while (true) {
-        cout << "> ";
+        cout << "\033[97m> \033[32m";
         getline(cin, message);
+        clearCurrentLine();
         if (message == "STOP") {
             message = username + " has left the chat room.";
             string encryptedMessage = encrypt(message);
@@ -89,13 +114,27 @@ void sendMessages(int socket) {
             cin.get();
             exit(0);
         }
-        message = username + ": " + message;
-        string encryptedMessage = encrypt(message);
+        string output = username;
+        output += ": " + message;
+        moveCursorUp();
+        cout << "\033[32m"<< "You: " << message;
+        moveCursorDown();
+        string encryptedMessage = encrypt(output);
         send(socket, encryptedMessage.c_str(), encryptedMessage.size(), 0);
     }
 }
 
-int main() {
+bool isValidUsername(const string& username) {
+    // Regular expression pattern for a valid username
+    regex pattern("^[a-zA-Z0-9_-]{3,16}$");
+    return regex_match(username, pattern);
+}
+
+
+
+
+
+int startupScreen(){
             cout << "[]Pick one of the following options to proceed:" << endl;
             cout << R"(
 [1]- Sign Up
@@ -106,27 +145,25 @@ int main() {
     cin >> userChoice;
     cin.ignore(); // Ignore the newline character left in the buffer
 
-    int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (clientSocket == -1) {
-        cerr << "Error in creating socket" << endl;
-        return 1;
-    }
-
-    sockaddr_in serverAddress;
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(8080);
-    inet_pton(AF_INET, "127.0.0.1", &serverAddress.sin_addr);
-
-    if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == -1) {
-        cerr << "Connection failed" << endl;
-        close(clientSocket);
-        return 1;
-    }
-
-    // Send user choice to server
-    send(clientSocket, &userChoice, sizeof(userChoice), 0);
 
     if (userChoice == '1') {
+
+        int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+        if (clientSocket == -1) {
+            cerr << "Error in creating socket" << endl;
+        }
+
+        sockaddr_in serverAddress;
+        serverAddress.sin_family = AF_INET;
+        serverAddress.sin_port = htons(8080);
+        inet_pton(AF_INET, "127.0.0.1", &serverAddress.sin_addr);
+
+        if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == -1) {
+            cerr << "Connection failed" << endl;
+            close(clientSocket);
+        }
+        
+        send(clientSocket, &userChoice, sizeof(userChoice), 0);   // Send user choice to server
         cout << "Enter your username: ";
         getline(cin, username);
         cout << "Enter your password: ";
@@ -137,6 +174,23 @@ int main() {
         string userSignup = username + "|" + password + " ";
         send(clientSocket, userSignup.c_str(), userSignup.size(), 0);
     } else if (userChoice == '2') {
+
+        int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+        if (clientSocket == -1) {
+            cerr << "Error in creating socket" << endl;
+        }
+
+        sockaddr_in serverAddress;
+        serverAddress.sin_family = AF_INET;
+        serverAddress.sin_port = htons(8080);
+        inet_pton(AF_INET, "127.0.0.1", &serverAddress.sin_addr);
+
+        if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == -1) {
+            cerr << "Connection failed" << endl;
+            close(clientSocket);
+        }
+    
+        send(clientSocket, &userChoice, sizeof(userChoice), 0);
         cout << "Enter your username: ";
         getline(cin, username);
         cout << "Enter your password: ";
@@ -151,10 +205,11 @@ int main() {
         string returnMessage = message;
         cout << returnMessage << endl;
         memset(message, 0, sizeof(message)); // Clear buffer for the next receive
-       if(returnMessage == "True"){
-        cout << "Enter room name: ";
+       if(returnMessage == "Login Successful!"){
+        cout << "\nEnter room name: ";
         string roomName;
         cin >> roomName;
+        cout << endl;
         roomName = roomName + "|";
         send(clientSocket, roomName.c_str(), roomName.size(), 0);
         string JoinedMessage = username + " has joined the room.";
@@ -173,12 +228,23 @@ int main() {
         cout << "Exiting Application...";
         cout.flush();
         sleep(2);
-        close(clientSocket);
+        //close(clientSocket);
         exit(1);
-        return 1;
+        return 0;
+    } else{
+        cout << "[] Invalid input, try again:" << endl;
+        startupScreen();
     }
 
     
+    return 0;
+
+}
+
+int main() {
+
+    startupScreen();
+
 
 
     return 0;
