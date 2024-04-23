@@ -1,5 +1,6 @@
 <h1>ChatApplication</h1>
 <br>
+<h1>User can close application by typing 'STOP'</h1>
 <h2>Breif Introduction to the application</h2>
 <br>
 <p>The chatting application allows users to create users and login.</p>
