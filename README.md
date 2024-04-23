@@ -8,3 +8,6 @@
 
 <h3>Application Demo</h3>
 <img src="GIFs/1-applicationdemo.gif" alt="Your GIF" style="width: 75%;">
+
+<h3>Receiving Messages</h3>
+<img src="GIFs/2-recevemessage.gif" alt="Your GIF" style="width: 75%;">
