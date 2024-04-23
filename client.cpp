@@ -88,14 +88,19 @@ string decrypt(string text)
     return result;
 }
 
-void receiveMessages(int socket) {
-
+stringstream time(){
     auto now = chrono::system_clock::now();
     auto UTC = chrono::duration_cast<chrono::seconds>(now.time_since_epoch()).count();
 
     auto in_time_t = chrono::system_clock::to_time_t(now);
     stringstream datetime;
     datetime << put_time(localtime(&in_time_t), "%Y-%m-%d %X");
+    return datetime;
+}
+
+void receiveMessages(int socket) {
+
+    stringstream datetime = time();
 
     char message[1024] = {0};
     int bytesReceived;
@@ -106,8 +111,7 @@ void receiveMessages(int socket) {
         string fileName = username + "_log.txt";
         ofstream usersFile(fileName, ios::app);
         if (usersFile.is_open()) {
-            //cout << "Hashed Password=" << hashedPassword << endl;
-            //cout.flush();
+            // Write the message into the log file along with the timestamp
             usersFile << "[" << datetime.str() << "]" << decrypt(message) << "\n";
             usersFile.close();
         } else {
@@ -120,7 +124,7 @@ void receiveMessages(int socket) {
         cerr << "Receive failed" << endl;
     }
 }
-
+    
 void sendMessages(int socket) {
     string message;
     while (true) {
@@ -128,14 +132,10 @@ void sendMessages(int socket) {
         getline(cin, message);
         clearCurrentLine();
 
-        auto now = chrono::system_clock::now();
-        auto UTC = chrono::duration_cast<chrono::seconds>(now.time_since_epoch()).count();
+        stringstream datetime = time();
 
-        auto in_time_t = chrono::system_clock::to_time_t(now);
-        stringstream datetime;
-        datetime << put_time(localtime(&in_time_t), "%Y-%m-%d %X");
 
-        if (message == "STOP") {
+        if (message == "STOP") { // Exit if user types 'STOP'
             message = username + " has left the chat room.\n";
             string encryptedMessage = encrypt(message);
             send(socket, encryptedMessage.c_str(), encryptedMessage.size(), 0);
@@ -172,7 +172,23 @@ bool isValidUsername(const string& username) {
 
 
 
+int connectionInitialization(){
+        int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+        if (clientSocket == -1) {
+            cerr << "Error in creating socket" << endl;
+        }
 
+        sockaddr_in serverAddress;
+        serverAddress.sin_family = AF_INET;
+        serverAddress.sin_port = htons(8080);
+        inet_pton(AF_INET, "127.0.0.1", &serverAddress.sin_addr);
+
+        if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == -1) {
+            cerr << "Connection failed" << endl;
+            close(clientSocket);
+        }
+        return clientSocket;
+}
 
 int startupScreen(){
             cout << "[]Pick one of the following options to proceed:" << endl;
@@ -188,51 +204,45 @@ int startupScreen(){
 
     if (userChoice == '1') {
 
-        int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-        if (clientSocket == -1) {
-            cerr << "Error in creating socket" << endl;
-        }
+        clientSocket = connectionInitialization();
 
-        sockaddr_in serverAddress;
-        serverAddress.sin_family = AF_INET;
-        serverAddress.sin_port = htons(8080);
-        inet_pton(AF_INET, "127.0.0.1", &serverAddress.sin_addr);
-
-        if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == -1) {
-            cerr << "Connection failed" << endl;
-            close(clientSocket);
-        }
-        
         send(clientSocket, &userChoice, sizeof(userChoice), 0);   // Send user choice to server
         cout << "Enter your username: ";
         getline(cin, username);
+
+
+        // Check if the username is valid
+        while(!isValidUsername(username)){ 
+            cout << "Invalid username, try again: ";
+            getline(cin, username);
+        }
         cout << "Enter your password: ";
         string password;
         getline(cin, password);
-        //cin.ignore();
 
         string userSignup = username + "|" + password + " ";
         send(clientSocket, userSignup.c_str(), userSignup.size(), 0);
+        char message[1024] = {0};
+        int bytesReceived;
+        while ((bytesReceived = recv(clientSocket, message, sizeof(message), 0)) > 0) {
+        string returnMessage = message;
+        cout << returnMessage << endl;
+        memset(message, 0, sizeof(message)); // Clear buffer for the next receive
+        startupScreen();
+        }
     } else if (userChoice == '2') {
 
-        int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-        if (clientSocket == -1) {
-            cerr << "Error in creating socket" << endl;
-        }
+        clientSocket = connectionInitialization();
 
-        sockaddr_in serverAddress;
-        serverAddress.sin_family = AF_INET;
-        serverAddress.sin_port = htons(8080);
-        inet_pton(AF_INET, "127.0.0.1", &serverAddress.sin_addr);
-
-        if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == -1) {
-            cerr << "Connection failed" << endl;
-            close(clientSocket);
-        }
-    
         send(clientSocket, &userChoice, sizeof(userChoice), 0);
         cout << "Enter your username: ";
         getline(cin, username);
+
+        
+        while(!isValidUsername(username)){
+            cout << "Invalid username, try again: ";
+            getline(cin, username);
+        }
         cout << "Enter your password: ";
         string password;
         getline(cin, password);
@@ -252,10 +262,11 @@ int startupScreen(){
         cout << endl;
         roomName = roomName + "|";
         send(clientSocket, roomName.c_str(), roomName.size(), 0);
-        string JoinedMessage = username + " has joined the room.\n";
-        string encryptedJoinMessage = encrypt(JoinedMessage);
+        string JoinedMessage = username + " has joined the room.";
+        string encryptedJoinMessage = encrypt(JoinedMessage) + "\n ";
         send(clientSocket, encryptedJoinMessage.c_str(), encryptedJoinMessage.size(), 0);
 
+        // Thread Creation
         thread receiveThread(receiveMessages, clientSocket);
         thread sendThread(sendMessages, clientSocket);
 
@@ -264,9 +275,12 @@ int startupScreen(){
 
         close(clientSocket);
         }else{
-            //cout << "Incorrect Username or Password!";
+            while ((bytesReceived = recv(clientSocket, message, sizeof(message), 0)) > 0) {
+            string returnMessage = message;
+            cout << returnMessage << endl;
+            memset(message, 0, sizeof(message)); // Clear buffer for the next receive
             close(clientSocket);
-        }
+        }}
         }
     } else if (userChoice == '3'){
         cout << "Exiting Application...";
