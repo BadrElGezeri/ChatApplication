@@ -5,7 +5,6 @@
 #include <cstring>
 #include <thread>
 #include <fstream>
-#include <algorithm>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
 #include <iomanip>
@@ -20,6 +19,7 @@ const int MAX_PASSWORD_LENGTH = 32;
 void userSignUp(int &clientSocket), userLogin(int &clientSocket);
 
 struct Room {
+    // Variable decleration
     int clients[MAX_CLIENTS_PER_ROOM];
     int numClients;
     char name[MAX_ROOM_NAME_LENGTH];
@@ -30,8 +30,8 @@ struct Room {
     }
 
     void addClient(int clientSocket) {
-        if (numClients < MAX_CLIENTS_PER_ROOM) {
-            clients[numClients++] = clientSocket;
+        if (numClients < MAX_CLIENTS_PER_ROOM) { // If number of clients in the room is less than max clients per room
+            clients[numClients++] = clientSocket; // Add the client
         }
     }
 
@@ -48,7 +48,7 @@ struct Room {
         }
     }
 
-    void broadcastMessage(const char* message, int senderSocket) {
+    void broadcastMessage(const char* message, int senderSocket) { // Send message to all users in the room
         for (int i = 0; i < numClients; ++i) {
             if (clients[i] != senderSocket) {
                 send(clients[i], message, strlen(message), 0);
@@ -59,15 +59,8 @@ struct Room {
 
 Room rooms[MAX_ROOMS];
 
-void cleanString(char* str, size_t length) {
-    for (size_t i = 0; i < length; ++i) {
-        if (str[i] == '\n' || str[i] == '\r') {
-            str[i] = '\0'; // Replace newline characters with null terminator
-            break; // Exit loop once newline is found
-        }
-    }
-}
 
+// Hash calculation using envelopes openssl 
 string computeHash(const string& password) {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     if (!ctx) {
@@ -109,22 +102,37 @@ string computeHash(const string& password) {
     return ss.str();
 }
 
+
+stringstream time(){
+    auto now = chrono::system_clock::now();
+    auto UTC = chrono::duration_cast<chrono::seconds>(now.time_since_epoch()).count();
+
+    auto in_time_t = chrono::system_clock::to_time_t(now);
+    stringstream datetime;
+    datetime << put_time(localtime(&in_time_t), "%Y-%m-%d %X");
+    return datetime;
+}
+
+
 void handleClient(int clientSocket) {
+    // Receive user choice and place it into char array
     char userChoice[1];
     recv(clientSocket, userChoice, sizeof(userChoice), 0);
-    //memset(userChoice, 0, sizeof(userChoice)); // Clear buffer for the next receive
 
     string userChoiceSTR = userChoice;
     int userChoiceINT = stoi(userChoiceSTR);
 
     Room* room = nullptr; // Declare room variable here
 
+
+    // Handle each case of user choice
     if (userChoiceINT == 1) {
         userSignUp(clientSocket);
     } else if (userChoiceINT == 2) {
         userLogin(clientSocket);
     }
     
+    // Receiving room name and creating room
     char roomName[MAX_ROOM_NAME_LENGTH];
     memset(roomName, '\0', sizeof(roomName));
     recv(clientSocket, roomName, sizeof(roomName), 0);
@@ -159,19 +167,9 @@ void handleClient(int clientSocket) {
         }
     }
 
-    if (!room) {
-        cerr << "Room not found: " << roomName << endl;
-        close(clientSocket);
-        return;
-    }
-
     // Add client to the room
     room->addClient(clientSocket);
-
-    // Notify other clients about new user
-    // string userJoined = username;
-    // userJoined += " joined the room.";
-    // room->broadcastMessage(userJoined.c_str(), clientSocket);
+    stringstream datetime = time();
 
     while ((bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0)) > 0) {
         cout << "[" << roomName << "] " << buffer << endl;
@@ -183,13 +181,13 @@ void handleClient(int clientSocket) {
         if (usersFile.is_open()) {
             //cout << "Hashed Password=" << hashedPassword << endl;
             //cout.flush();
-            usersFile << message << "\n";
+            usersFile <<  "[" << datetime.str() <<"]"<< message << "\n";
             usersFile.close();
         } else {
             cerr << "Error opening users.txt" << endl;
         }
 
-
+        // Send message to all the users in the same room
         room->broadcastMessage(message.c_str(), clientSocket);
         memset(buffer, 0, sizeof(buffer));
     }
@@ -201,12 +199,30 @@ void handleClient(int clientSocket) {
     // Remove client from the room
     room->removeClient(clientSocket);
 
-    // // Notify other clients about user leaving
-    // string userLeft = username;
-    // userLeft += " left the room.";
-    // room->broadcastMessage(userLeft.c_str(), clientSocket);
-
     close(clientSocket);
+}
+
+
+bool isUsernameValid(string username){
+    bool usernameValid;
+    ifstream usersFile("users.txt");
+    string line;
+    string loginSuccess = "False";
+
+    // Search through users.txt if the username was used before
+    while (getline(usersFile, line)) {
+        string usernameFromFile;
+        stringstream ss(line);
+        getline(ss, usernameFromFile, '|');
+        if (username == usernameFromFile){
+            usernameValid = false;
+            break;
+        } else {
+            usernameValid = true;
+        }
+    }
+
+    return usernameValid;
 }
 
 
@@ -219,11 +235,9 @@ void userSignUp(int& clientSocket) {
     string usernameSignUp, passwordSignUp;
     getline(ss, usernameSignUp, '|');
     getline(ss, passwordSignUp, ' ');
-
-    cout << "Username: " << usernameSignUp << endl;
-    cout << "Password: " << passwordSignUp << endl;
+    if(isUsernameValid(usernameSignUp)){
+    cout << "User created with username: " << usernameSignUp << endl;
         // Process username and password
-        //cout << "Username: " << username << ", Password: " << password << endl;
 
         // Save username and hashed password to users.txt
         ofstream usersFile("users.txt", ios::app);
@@ -234,9 +248,17 @@ void userSignUp(int& clientSocket) {
             //cout.flush();
             usersFile << usernameSignUp << "|" << hashedPassword << "\n";
             usersFile.close();
+            string signupSuccessful = "User created successfully!\n";
+            send(clientSocket, signupSuccessful.c_str(), signupSuccessful.size(), 0);
+
         } else {
             cerr << "Error opening users.txt" << endl;
         }
+    } else {
+        string signupSuccessful = "Username already used!\n";
+        send(clientSocket, signupSuccessful.c_str(), signupSuccessful.size(), 0);
+    }
+
 }
 
 void userLogin(int &clientSocket){
@@ -249,8 +271,7 @@ void userLogin(int &clientSocket){
     getline(ss, usernameLogin, '|');
     getline(ss, passwordLogin, ' ');
 
-    cout << "Username: " << usernameLogin << endl;
-    cout << "Password: " << passwordLogin << endl;
+    cout << "Login attempt for user: " << usernameLogin << endl;
         // Validate username and password from users.txt
         ifstream usersFile("users.txt");
         string line;
@@ -270,16 +291,13 @@ void userLogin(int &clientSocket){
                 send(clientSocket, loginSuccess.c_str(), loginSuccess.size(), 0);
                 break;
                 }
-             else{ 
-                loginSuccess = "Username or password incorrect!";
-                cout << "Login Unsuccessful" << endl;
-                cout.flush();
-                send(clientSocket, loginSuccess.c_str(), loginSuccess.size(), 0);
-                break;
-            }
-            }
-            
+            }       
         }
+        if(loginSuccess != "Login Successful!"){
+        loginSuccess = "Username or password incorrect!";
+        cout << "Login Unsuccessful" << endl;
+        cout.flush();
+        send(clientSocket, loginSuccess.c_str(), loginSuccess.size(), 0);}
 }
 
 int main() {
@@ -313,7 +331,7 @@ int main() {
             close(serverSocket);
             return 1;
         }
-
+        // Thread creation for handleClient function
         thread clientThread(handleClient, clientSocket);
         clientThread.detach();
     }
