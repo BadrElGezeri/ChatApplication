@@ -7,4 +7,4 @@
 <p>The chatting application allows users to send and receive messages at the same time by utilizing threads.</p>
 
 <h3>Application Demo</h3>
-<img src="GIFs/1-applicationdemo.gif" alt="Your GIF" style="width: 60%;">
+<img src="GIFs/1-applicationdemo.gif" alt="Your GIF" style="width: 75%;">
