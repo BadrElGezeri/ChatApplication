@@ -178,6 +178,18 @@ void handleClient(int clientSocket) {
         // Broadcast the message to all other clients in the room
         string message;
         message += buffer;
+        // Save Log of messages
+        ofstream usersFile("log.txt", ios::app);
+        if (usersFile.is_open()) {
+            //cout << "Hashed Password=" << hashedPassword << endl;
+            //cout.flush();
+            usersFile << message << "\n";
+            usersFile.close();
+        } else {
+            cerr << "Error opening users.txt" << endl;
+        }
+
+
         room->broadcastMessage(message.c_str(), clientSocket);
         memset(buffer, 0, sizeof(buffer));
     }
@@ -224,8 +236,7 @@ void userSignUp(int& clientSocket) {
             usersFile.close();
         } else {
             cerr << "Error opening users.txt" << endl;
-        
-    }
+        }
 }
 
 void userLogin(int &clientSocket){
