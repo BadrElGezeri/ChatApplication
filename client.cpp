@@ -1,10 +1,15 @@
 #include <iostream>
 #include <cstring>
+#include <fstream>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <thread>
 #include <regex>
+#include <chrono>
+#include <iomanip> // put_time
+#include <fstream>
+#include <sstream> // stringstrea
 
 using namespace std;
 
@@ -29,8 +34,7 @@ void displayOutput(const string& output) {
     cout << output << endl; // Display the output
 }
 
-
-
+    
 
 
 string encrypt(string text)
@@ -85,12 +89,30 @@ string decrypt(string text)
 }
 
 void receiveMessages(int socket) {
+
+    auto now = chrono::system_clock::now();
+    auto UTC = chrono::duration_cast<chrono::seconds>(now.time_since_epoch()).count();
+
+    auto in_time_t = chrono::system_clock::to_time_t(now);
+    stringstream datetime;
+    datetime << put_time(localtime(&in_time_t), "%Y-%m-%d %X");
+
     char message[1024] = {0};
     int bytesReceived;
     while ((bytesReceived = recv(socket, message, sizeof(message), 0)) > 0) {
         //cout << "Encrypted Message: " << message << endl;
         // cout << "Decrypted Message: " << decrypt(message) << endl;
         cout << "\r\033[36m"<< decrypt(message) << "\n\033[36m";
+        string fileName = username + "_log.txt";
+        ofstream usersFile(fileName, ios::app);
+        if (usersFile.is_open()) {
+            //cout << "Hashed Password=" << hashedPassword << endl;
+            //cout.flush();
+            usersFile << "[" << datetime.str() << "]" << decrypt(message) << "\n";
+            usersFile.close();
+        } else {
+            cerr << "Error opening users.txt" << endl;
+        }
         displayOutput(decrypt(message));
         memset(message, 0, sizeof(message)); // Clear buffer for the next receive
     }
@@ -105,8 +127,16 @@ void sendMessages(int socket) {
         cout << "\033[97m> \033[32m";
         getline(cin, message);
         clearCurrentLine();
+
+        auto now = chrono::system_clock::now();
+        auto UTC = chrono::duration_cast<chrono::seconds>(now.time_since_epoch()).count();
+
+        auto in_time_t = chrono::system_clock::to_time_t(now);
+        stringstream datetime;
+        datetime << put_time(localtime(&in_time_t), "%Y-%m-%d %X");
+
         if (message == "STOP") {
-            message = username + " has left the chat room.";
+            message = username + " has left the chat room.\n";
             string encryptedMessage = encrypt(message);
             send(socket, encryptedMessage.c_str(), encryptedMessage.size(), 0);
             cout << "Exiting application" << endl;
@@ -116,6 +146,16 @@ void sendMessages(int socket) {
         }
         string output = username;
         output += ": " + message;
+        string fileName = username + "_log.txt";
+        ofstream usersFile(fileName, ios::app);
+        if (usersFile.is_open()) {
+            //cout << "Hashed Password=" << hashedPassword << endl;
+            //cout.flush();
+            usersFile << "[" << datetime.str() << "]"<< username << ": "<< message << "\n";
+            usersFile.close();
+        } else {
+            cerr << "Error opening users.txt" << endl;
+        }
         moveCursorUp();
         cout << "\033[32m"<< "You: " << message;
         moveCursorDown();
@@ -212,7 +252,7 @@ int startupScreen(){
         cout << endl;
         roomName = roomName + "|";
         send(clientSocket, roomName.c_str(), roomName.size(), 0);
-        string JoinedMessage = username + " has joined the room.";
+        string JoinedMessage = username + " has joined the room.\n";
         string encryptedJoinMessage = encrypt(JoinedMessage);
         send(clientSocket, encryptedJoinMessage.c_str(), encryptedJoinMessage.size(), 0);
 
@@ -223,7 +263,11 @@ int startupScreen(){
         sendThread.join();
 
         close(clientSocket);
-        }}
+        }else{
+            //cout << "Incorrect Username or Password!";
+            close(clientSocket);
+        }
+        }
     } else if (userChoice == '3'){
         cout << "Exiting Application...";
         cout.flush();
